@@ -21,7 +21,9 @@
 #include <nfc-extra/pn53x.h>
 #include <nfc/nfc.h>
 
+#if NFCPP_ENABLE_CRAPTO1
 #include <crapto1/crapto1.h>
+#endif
 
 #define NFCPP_LIBNFC_ENSURE(result)                                            \
     if (result < 0) {                                                          \
@@ -198,6 +200,7 @@ struct SelectParityCalculatorTransformer<First, Rest...> {
 
 namespace mifare {
 
+#if NFCPP_ENABLE_CRAPTO1
 class MifareCrypto1Cipher {
 public:
     explicit MifareCrypto1Cipher(std::uint64_t key)
@@ -259,6 +262,7 @@ private:
         return decltype(m_state)(ptr, crypto1_destroy);
     }
 };
+#endif
 
 } // namespace mifare
 
@@ -442,9 +446,9 @@ public:
     static constexpr auto parity_enabled = !std::is_same_v<
         typename detail::SelectParityCalculatorTransformer<Ts...>::type,
         void>;
-
+#if NFCPP_ENABLE_CRAPTO1
     using cipher_t = mifare::MifareCrypto1Cipher;
-
+#endif
     constexpr explicit NfcTransmitData(
         const std::array<std::uint8_t, Base>& raw
     )
@@ -472,7 +476,7 @@ public:
     {
         return self.m_parity_buffer.get();
     }
-
+#if NFCPP_ENABLE_CRAPTO1
     class CryptWrapper {
     public:
         void crypt_feed(std::size_t len) { _crypt(len, true); }
@@ -517,7 +521,7 @@ public:
         callback(CryptWrapper(cipher, *this));
         return *this;
     }
-
+#endif
 private:
     std::array<std::uint8_t, buffer_size> m_buffer{};
     [[no_unique_address]] detail::ParityStorage<parity_enabled, buffer_size>
@@ -556,9 +560,10 @@ using NfcTransmitDataAutoCRCParity = NfcTransmitData<
 template <detail::TriviallyCopyable T>
 class NfcReceiveData {
 public:
-    using this_t   = NfcReceiveData<T>;
+    using this_t = NfcReceiveData<T>;
+#if NFCPP_ENABLE_CRAPTO1
     using cipher_t = mifare::MifareCrypto1Cipher;
-
+#endif
     auto get(this auto& self) {
         return std::span(self.m_buffer.data(), sizeof(T));
     }
@@ -570,7 +575,7 @@ public:
             std::ranges::reverse(m_buffer | std::views::take(sizeof(T)));
         return *this;
     }
-
+#if NFCPP_ENABLE_CRAPTO1
     this_t& as_decrypted(cipher_t& cipher, bool feedback, bool is_encrypted) {
         for (auto i : std::views::iota(0uz, sizeof(T)) | std::views::reverse) {
             auto& byte = m_buffer[i];
@@ -578,7 +583,7 @@ public:
         }
         return *this;
     }
-
+#endif
     auto& operator*() const {
         return *reinterpret_cast<const T*>(m_buffer.data());
     }
