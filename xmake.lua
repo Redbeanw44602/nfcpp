@@ -34,3 +34,4 @@ target('nfcpp')
         end
     end)
 
+includes('examples/xmake.lua')
