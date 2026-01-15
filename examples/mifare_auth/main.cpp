@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) try {
     );
 
     // [T -> R] Tag answer and reader verification.
-    //          Authentiation completed.
+    //          Authentication completed.
 
     auto at = *at_r.as_big_endian().as_decrypted(cipher, false, false);
 
@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) try {
 
     nt = prng_successor(nt, 32);
     if (at == nt) {
-        std::println("Authentiation completed.");
+        std::println("Authentication completed.");
     }
 
     return 0;
