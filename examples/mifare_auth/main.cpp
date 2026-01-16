@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) try {
     std::array<uint8_t, 8> ar{}; // 4 bytes (Nr) + 4 bytes (Ntt)
 
     nt = prng_successor(nt, 32);
-    for (size_t i = 4; i < 8; i++) {
+    for (auto i : std::views::iota(4, 8)) {
         nt    = prng_successor(nt, 8);
         ar[i] = nt & 0xff;
     }

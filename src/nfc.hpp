@@ -206,7 +206,7 @@ namespace mifare {
 #if NFCPP_ENABLE_CRAPTO1
 class MifareCrypto1Cipher {
 public:
-    explicit MifareCrypto1Cipher(std::uint64_t key)
+    explicit MifareCrypto1Cipher(std::uint64_t key = 0)
     : m_state(crypto1_create(key), crypto1_destroy) {};
 
     // bare c methods
@@ -217,6 +217,8 @@ public:
     // unused
     // - lfsr_common_prefix
     // - lfsr_prefix_ks
+
+    void init(std::uint64_t key) { crypto1_init(&*m_state, key); }
 
     auto get_lfsr() const {
         std::uint64_t ret{};
