@@ -102,6 +102,9 @@ concept IsNfcTargetInfo = std::constructible_from<T, nfc_target_info*>;
 template <typename T>
 using Ptr = T*;
 
+template <typename T>
+using OptionalRef = std::optional<std::reference_wrapper<T>>;
+
 template <bool Enabled, std::size_t Size>
 struct ParityStorage;
 
@@ -674,9 +677,8 @@ public:
             const detail::IsReadableByteSpan auto& tx_data,
             detail::IsMutableByteSpan auto&        rx_data,
             std::size_t                            tx_size_in_bit = 0,
-            std::optional<std::reference_wrapper<NfcReceiveParity>>
-                rx_data_par = std::nullopt,
-            int timeout     = 0
+            detail::OptionalRef<NfcReceiveParity>  rx_data_par = std::nullopt,
+            int                                    timeout     = 0
         ) {
             using tx_data_t = std::remove_cvref_t<decltype(tx_data)>;
 
