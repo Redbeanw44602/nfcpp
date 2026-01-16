@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include <cstring>
 #include <memory>
 #include <ranges>
 #include <vector>
@@ -406,10 +407,12 @@ public:
     }
 
     auto nuid() const {
-        auto id = uid();
-        return *reinterpret_cast<const std::uint32_t*>(
-            id.subspan(id.size() - 4).data()
-        );
+        auto          id = uid();
+        std::uint32_t ret;
+
+        std::memcpy(&ret, id.data() + id.size() - 4, sizeof(ret));
+
+        return util::to_big_endian(ret);
     }
 
     auto ats() const {

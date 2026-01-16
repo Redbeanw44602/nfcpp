@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) try {
     auto target = initiator->select_passive_target(NfcCard::MifareClassic1K);
 
     auto target_info = target.get_info<NfcISO14443ATargetInfo>();
-    auto nuid        = to_big_endian(target_info->nuid());
+    auto nuid        = target_info->nuid();
 
     std::println("Uid: {}", hex(nuid));
 
