@@ -397,17 +397,31 @@ public:
     : m_info(&ptr->nai) {}
 
     auto atqa() const {
+        return std::array<std::uint8_t, 2>{
+            m_info->abtAtqa[0],
+            m_info->abtAtqa[1]
+        };
+    }
+
+    auto atqa_ref() const {
         return std::span<const std::uint8_t, 2>(m_info->abtAtqa);
     }
 
     auto sak() const { return m_info->btSak; }
 
     auto uid() const {
+        return std::vector<std::uint8_t>(
+            m_info->abtUid,
+            m_info->abtUid + m_info->szUidLen
+        );
+    }
+
+    auto uid_ref() const {
         return std::span<const std::uint8_t>{m_info->abtUid, m_info->szUidLen};
     }
 
     auto nuid() const {
-        auto          id = uid();
+        auto          id = uid_ref();
         std::uint32_t ret;
 
         std::memcpy(&ret, id.data() + id.size() - 4, sizeof(ret));
