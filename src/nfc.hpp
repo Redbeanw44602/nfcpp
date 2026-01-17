@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LGPL-3.0-only
+// SPDX-License-Identifier: MIT
 /*
  * Copyright (C) 2026-present, RedbeanW.
  * This file is part of the NFC++ open source project.

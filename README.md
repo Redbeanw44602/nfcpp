@@ -155,4 +155,4 @@ This will automatically build the crapto1 library and enable all crypto1 feature
 
 ## License
 
-LGPLv3 by default, GPLv3 if crapto1 is used.
+MIT by default, GPLv3 if crapto1 is used.
