@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) try {
     // [T -> R] Answer plaintext nonce.
     //          Each initializes its Crypto1 state.
 
-    auto nt = nt_r.as_big_endian().get<uint32_t>();
+    auto nt = nt_r.as_big_endian().expect<uint32_t>();
 
     std::println("Nt:  {}", hex(std::byteswap(nt)));
 
@@ -86,8 +86,9 @@ int main(int argc, char* argv[]) try {
     // [T -> R] Tag answer and reader verification.
     //          Authentication completed.
 
-    auto at =
-        at_r.as_big_endian().as_decrypted(cipher, false, false).get<uint32_t>();
+    auto at = at_r.as_big_endian()
+                  .as_decrypted(cipher, false, false)
+                  .expect<uint32_t>();
 
     std::println("At:  {}", hex(std::byteswap(at)));
 

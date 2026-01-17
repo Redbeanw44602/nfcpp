@@ -94,7 +94,7 @@ auto nt_r = initiator->transceive_bits(data_crc_parity(MC_AUTH_A, SECTOR_ADDR), 
 
 // [T -> R] Answer plaintext nonce.
 //          Each initializes its Crypto1 state.
-auto nt = nt_r.as_big_endian().get<uint32_t>();
+auto nt = nt_r.as_big_endian().expect<uint32_t>();
 
 MifareCrypto1Cipher cipher(KEY_A);
 cipher.word(nuid ^ nt, false);
@@ -121,8 +121,9 @@ auto at_r = initiator->transceive_bits(
 
 // [T -> R] Tag answer and reader verification.
 //          Authentication completed.
-auto at =
-    at_r.as_big_endian().as_decrypted(cipher, false, false).get<uint32_t>();
+auto at = at_r.as_big_endian()
+              .as_decrypted(cipher, false, false)
+              .expect<uint32_t>();
 
 nt = prng_successor(nt, 32);
 if (at == nt) {
