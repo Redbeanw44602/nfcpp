@@ -639,25 +639,31 @@ public:
         // - nfc_initiator_poll_target
         // - nfc_initiator_select_dep_target
         // - nfc_initiator_poll_dep_target
-        // - nfc_initiator_deselect_target
         // - nfc_initiator_transceive_bytes_timed
         // - nfc_initiator_transceive_bits_timed
         // - nfc_initiator_target_is_present
 
-        auto select_passive_target(NfcCard card) {
+        auto select_passive_target(
+            NfcCard                                 card,
+            std::optional<std::span<const uint8_t>> uid = std::nullopt
+        ) {
             NfcTarget target;
             auto      modulation = get_modulation_from_card(card);
 
             auto ret = nfc_initiator_select_passive_target(
                 m_device,
                 modulation,
-                nullptr,
-                0,
+                uid ? uid->data() : nullptr,
+                uid ? uid->size() : 0,
                 &target.get()
             );
             NFCPP_LIBNFC_ENSURE(ret);
 
             return target;
+        }
+
+        void deselect_target() {
+            NFCPP_LIBNFC_ENSURE(nfc_initiator_deselect_target(m_device));
         }
 
         void transceive_bytes(
