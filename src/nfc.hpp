@@ -77,6 +77,9 @@ concept HasApplyParity =
     requires(std::span<std::uint8_t, 1> input) { T::apply_parity(input); };
 
 template <typename T>
+concept IsByte = std::convertible_to<T, uint8_t>;
+
+template <typename T>
 concept IsReadableByteSpan = HasGetter<const T, std::span<const std::uint8_t>>;
 
 template <typename T>
@@ -161,7 +164,7 @@ TransformNfcTransmitData(std::span<const std::uint8_t, Base> input) {
         [&] {
             if constexpr (HasApply<Ts>) {
                 current_size = Ts::expand(current_size);
-                Ts::apply(ret_view.subspan(0, current_size));
+                Ts::apply(ret_view.first(current_size));
             }
         }(),
         ...
@@ -322,6 +325,18 @@ constexpr std::string hex(const T& object) {
     return hex(std::span<const T, 1>(&object, 1));
 }
 
+template <detail::IsByte... Bytes>
+bool is_bytes(std::span<const uint8_t> span, Bytes... bytes) {
+    const auto     data_size    = span.size();
+    constexpr auto pattern_size = sizeof...(Bytes);
+
+    if (data_size != pattern_size) return false;
+    const std::array<uint8_t, pattern_size> pattern{
+        static_cast<uint8_t>(bytes)...
+    };
+
+    return std::ranges::equal(span, pattern);
+}
 
 } // namespace util
 
@@ -481,11 +496,8 @@ public:
           detail::TransformNfcTransmitDataParity<buffer_size, Ts...>(m_buffer)
       ) {}
 
-    template <typename... Bytes>
-        requires(
-            sizeof...(Bytes) == Base
-            && (std::conjunction_v<std::is_convertible<Bytes, std::uint8_t>...>)
-        )
+    template <detail::IsByte... Bytes>
+        requires(sizeof...(Bytes) == Base)
     constexpr explicit NfcTransmitData(Bytes... bytes)
     : NfcTransmitData(
           std::array<std::uint8_t, Base>{static_cast<std::uint8_t>(bytes)...}
@@ -618,6 +630,23 @@ public:
         template <bool BitMode>
         class ResultWrapper {
         public:
+            template <detail::IsByte... Bytes>
+            bool is_bytes(Bytes... bytes) const {
+                return util::is_bytes(
+                    m_buffer_view.first(valid_size_in_byte()),
+                    bytes...
+                );
+            }
+
+            bool check_bcc() const {
+                return std::ranges::fold_left(
+                           m_buffer_view.first(valid_size_in_byte()),
+                           uint8_t{0},
+                           std::bit_xor<>()
+                       )
+                    == 0;
+            }
+
             auto& as_big_endian() {
                 if constexpr (std::endian::native == std::endian::little)
                     std::ranges::reverse(
@@ -651,24 +680,24 @@ public:
 #endif
 
             template <detail::TriviallyCopyable T>
-            auto& get() {
+            auto& get() const {
                 return *reinterpret_cast<const T*>(m_buffer_view.data());
             }
 
             template <std::size_t Sz>
-            auto get_bytes() {
+            auto get_bytes() const {
                 std::array<uint8_t, Sz> ret;
                 std::ranges::copy_n(m_buffer_view.begin(), Sz, ret.begin());
                 return ret;
             }
 
             template <std::size_t Sz>
-            auto get_bytes_ref() {
-                return m_buffer_view.subspan(0, Sz);
+            auto get_bytes_ref() const {
+                return m_buffer_view.first(Sz);
             }
 
             template <detail::TriviallyCopyable T>
-            auto& expect() {
+            auto& expect() const {
                 constexpr std::size_t expect_size =
                     BitMode ? sizeof(T) * 8 : sizeof(T);
                 _throw_if_size_mismatch<expect_size>();
@@ -676,21 +705,21 @@ public:
             }
 
             template <std::size_t Sz>
-            auto& expect_bytes() {
+            auto expect_bytes() const {
                 constexpr std::size_t expect_size = BitMode ? Sz * 8 : Sz;
                 _throw_if_size_mismatch<expect_size>();
                 return get_bytes<Sz>();
             }
 
             template <std::size_t Sz>
-            auto& expect_bytes_ref() {
+            auto expect_bytes_ref() const {
                 constexpr std::size_t expect_size = BitMode ? Sz * 8 : Sz;
                 _throw_if_size_mismatch<expect_size>();
                 return get_bytes<Sz>();
             }
 
             template <std::size_t SzInBit>
-            auto& expect_bits()
+            auto expect_bits() const
                 requires BitMode
             {
                 _throw_if_size_mismatch<SzInBit>();
@@ -698,7 +727,7 @@ public:
             }
 
             template <std::size_t SzInBit>
-            auto& expect_bits_ref()
+            auto expect_bits_ref() const
                 requires BitMode
             {
                 _throw_if_size_mismatch<SzInBit>();
@@ -717,7 +746,7 @@ public:
               m_valid_size(valid_size) {}
 
             template <std::size_t SizeMayInBits>
-            void _throw_if_size_mismatch() {
+            void _throw_if_size_mismatch() const {
                 if (m_valid_size != SizeMayInBits) {
                     throw NfcException(
                         NFC_EINVARG,
