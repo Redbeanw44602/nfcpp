@@ -77,13 +77,18 @@ concept HasApplyParity =
     requires(std::span<std::uint8_t, 1> input) { T::apply_parity(input); };
 
 template <typename T>
-concept IsByte = std::convertible_to<T, uint8_t>;
+concept IsByte = std::convertible_to<T, std::uint8_t>;
 
 template <typename T>
-concept IsReadableByteSpan = HasGetter<const T, std::span<const std::uint8_t>>;
+concept IsByteRange =
+    std::ranges::contiguous_range<T>
+    && std::convertible_to<std::ranges::range_value_t<T>, std::uint8_t>;
 
 template <typename T>
-concept IsMutableByteSpan = HasGetter<T, std::span<std::uint8_t>>;
+concept HasReadableByteSpan = HasGetter<const T, std::span<const std::uint8_t>>;
+
+template <typename T>
+concept HasMutableByteSpan = HasGetter<T, std::span<std::uint8_t>>;
 
 template <typename F>
 concept IsParityCalculator = Callable<F, void, std::span<std::uint8_t, 1>>;
@@ -102,6 +107,9 @@ concept IsNfcTransmitDataTransformer = HasApply<T> || HasApplyParity<T>;
 
 template <typename T>
 concept IsNfcTargetInfo = std::constructible_from<T, nfc_target_info*>;
+
+template <typename T>
+concept IsByteOrByteRange = IsByte<T> || IsByteRange<T>;
 
 template <typename T>
 using Ptr = T*;
@@ -130,7 +138,7 @@ private:
 };
 
 template <std::size_t Base, IsNfcTransmitDataTransformer... Ts>
-consteval auto ComputeNfcTransmitDataSize() {
+consteval auto compute_nfc_transmit_data_size() {
     std::size_t ret = Base;
 
     (
@@ -151,14 +159,14 @@ template <
     IsNfcTransmitDataTransformer... Ts>
     requires(FnSize >= Base)
 constexpr auto
-TransformNfcTransmitData(std::span<const std::uint8_t, Base> input) {
+transform_nfc_transmit_data(std::span<const std::uint8_t, Base> input) {
     std::array<std::uint8_t, FnSize> ret;
-    std::size_t                      current_size = Base;
+    [[maybe_unused]] std::size_t     current_size = Base;
 
     // The Base size may not match FnSize, so we copy it.
     std::ranges::copy(input, ret.begin());
 
-    auto ret_view = std::span(ret);
+    [[maybe_unused]] auto ret_view = std::span(ret);
 
     (
         [&] {
@@ -174,8 +182,9 @@ TransformNfcTransmitData(std::span<const std::uint8_t, Base> input) {
 }
 
 template <std::size_t FnSize, IsNfcTransmitDataTransformer... Ts>
-constexpr auto
-TransformNfcTransmitDataParity(std::span<const std::uint8_t, FnSize> input) {
+constexpr auto transform_nfc_transmit_data_parity(
+    std::span<const std::uint8_t, FnSize> input
+) {
     std::array<std::uint8_t, FnSize> ret;
 
     // The input data is actual data (not a parity), so we copy it.
@@ -326,13 +335,13 @@ constexpr std::string hex(const T& object) {
 }
 
 template <detail::IsByte... Bytes>
-bool is_bytes(std::span<const uint8_t> span, Bytes... bytes) {
+bool is_bytes(std::span<const std::uint8_t> span, Bytes... bytes) {
     const auto     data_size    = span.size();
     constexpr auto pattern_size = sizeof...(Bytes);
 
     if (data_size != pattern_size) return false;
-    const std::array<uint8_t, pattern_size> pattern{
-        static_cast<uint8_t>(bytes)...
+    const std::array<std::uint8_t, pattern_size> pattern{
+        static_cast<std::uint8_t>(bytes)...
     };
 
     return std::ranges::equal(span, pattern);
@@ -479,7 +488,7 @@ template <std::size_t Base, detail::IsNfcTransmitDataTransformer... Ts>
 class NfcTransmitData {
 public:
     static constexpr std::size_t buffer_size =
-        detail::ComputeNfcTransmitDataSize<Base, Ts...>();
+        detail::compute_nfc_transmit_data_size<Base, Ts...>();
     static constexpr auto parity_enabled = !std::is_same_v<
         typename detail::SelectParityCalculatorTransformer<Ts...>::type,
         void>;
@@ -489,11 +498,15 @@ public:
     constexpr explicit NfcTransmitData(
         const std::array<std::uint8_t, Base>& raw
     )
-    : m_buffer(detail::TransformNfcTransmitData<Base, buffer_size, Ts...>(raw)),
+    : m_buffer(
+          detail::transform_nfc_transmit_data<Base, buffer_size, Ts...>(raw)
+      ),
       m_parity_buffer(
           // The first transformer's `apply_parity` converts `m_buffer` into
           // parity bytes.
-          detail::TransformNfcTransmitDataParity<buffer_size, Ts...>(m_buffer)
+          detail::transform_nfc_transmit_data_parity<buffer_size, Ts...>(
+              m_buffer
+          )
       ) {}
 
     template <detail::IsByte... Bytes>
@@ -605,8 +618,8 @@ public:
         // - nfc_initiator_target_is_present
 
         auto select_passive_target(
-            NfcCard                                 card,
-            std::optional<std::span<const uint8_t>> uid = std::nullopt
+            NfcCard                                      card,
+            std::optional<std::span<const std::uint8_t>> uid = std::nullopt
         ) {
             NfcTarget target;
             auto      modulation = get_modulation_from_card(card);
@@ -641,7 +654,7 @@ public:
             bool check_bcc() const {
                 return std::ranges::fold_left(
                            m_buffer_view.first(valid_size_in_byte()),
-                           uint8_t{0},
+                           std::uint8_t{0},
                            std::bit_xor<>()
                        )
                     == 0;
@@ -686,7 +699,7 @@ public:
 
             template <std::size_t Sz>
             auto get_bytes() const {
-                std::array<uint8_t, Sz> ret;
+                std::array<std::uint8_t, Sz> ret;
                 std::ranges::copy_n(m_buffer_view.begin(), Sz, ret.begin());
                 return ret;
             }
@@ -739,8 +752,8 @@ public:
         private:
             friend class Initiator;
             ResultWrapper(
-                std::span<uint8_t> buffer_view,
-                std::size_t        valid_size
+                std::span<std::uint8_t> buffer_view,
+                std::size_t             valid_size
             )
             : m_buffer_view(buffer_view),
               m_valid_size(valid_size) {}
@@ -772,14 +785,14 @@ public:
                 return BitMode ? alignup_8(m_valid_size) / 8 : m_valid_size;
             }
 
-            std::span<uint8_t> m_buffer_view;
-            std::size_t        m_valid_size; // Possibly in bits.
+            std::span<std::uint8_t> m_buffer_view;
+            std::size_t             m_valid_size; // Possibly in bits.
         };
 
         auto transceive_bytes(
-            const detail::IsReadableByteSpan auto& tx_data,
-            detail::IsMutableByteSpan auto&        rx_data,
-            int                                    timeout = 0
+            const detail::HasReadableByteSpan auto& tx_data,
+            detail::HasMutableByteSpan auto&        rx_data,
+            int                                     timeout = 0
         ) {
             auto tx = tx_data.get();
             auto rx = rx_data.get();
@@ -799,7 +812,7 @@ public:
 
         // Ensure NP_HANDLE_PARITY == true if AutoParity is not used,
         // otherwise, libnfc will access to null pointer!
-        template <detail::IsReadableByteSpan Tx, detail::IsMutableByteSpan Rx>
+        template <detail::HasReadableByteSpan Tx, detail::HasMutableByteSpan Rx>
         auto transceive_bits(
             const Tx&               tx_data,
             Rx&                     rx_data,
