@@ -90,12 +90,11 @@ constexpr auto SECTOR_ADDR = 0x00;
 constexpr auto KEY_A       = 0xFFFFFFFFFFFF;
 
 // [R -> T] Request plaintext nonce. (Nt)
-NfcReceiveData<uint32_t> nt_r;
-initiator->transceive_bits(data_crc_parity(MC_AUTH_A, SECTOR_ADDR), nt_r);
+auto nt_r = initiator->transceive_bits(data_crc_parity(MC_AUTH_A, SECTOR_ADDR), buffer);
 
 // [T -> R] Answer plaintext nonce.
 //          Each initializes its Crypto1 state.
-auto nt = *nt_r.as_big_endian();
+auto nt = nt_r.as_big_endian().get<uint32_t>();
 
 MifareCrypto1Cipher cipher(KEY_A);
 cipher.word(nuid ^ nt, false);
@@ -109,8 +108,7 @@ for (auto i : std::views::iota(4, 8)) {
     ar[i] = nt & 0xff;
 }
 
-NfcReceiveData<uint32_t> at_r;
-initiator->transceive_bits(
+auto at_r = initiator->transceive_bits(
     data_parity(ar).with_encrypt(
         cipher,
         [](auto&& cipher) {
@@ -118,12 +116,13 @@ initiator->transceive_bits(
             cipher.crypt(4);
         }
     ),
-    at_r
+    buffer
 );
 
 // [T -> R] Tag answer and reader verification.
 //          Authentication completed.
-auto at = *at_r.as_big_endian().as_decrypted(cipher, false, false);
+auto at =
+    at_r.as_big_endian().as_decrypted(cipher, false, false).get<uint32_t>();
 
 nt = prng_successor(nt, 32);
 if (at == nt) {

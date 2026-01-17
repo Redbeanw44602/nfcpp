@@ -579,57 +579,6 @@ using NfcTransmitDataAutoCRCParity = NfcTransmitData<
 
 // END   ^^^
 
-template <detail::TriviallyCopyable T>
-class NfcReceiveData {
-public:
-    using this_t = NfcReceiveData<T>;
-#if NFCPP_ENABLE_CRAPTO1
-    using cipher_t = mifare::MifareCrypto1Cipher;
-#endif
-    auto get(this auto& self) {
-        return std::span(self.m_buffer.data(), sizeof(T));
-    }
-
-    this_t& as_big_endian()
-        requires std::integral<T>
-    {
-        if constexpr (std::endian::native == std::endian::little)
-            std::ranges::reverse(m_buffer | std::views::take(sizeof(T)));
-        return *this;
-    }
-#if NFCPP_ENABLE_CRAPTO1
-    this_t& as_decrypted(cipher_t& cipher, bool feedback, bool is_encrypted) {
-        for (auto i : std::views::iota(0uz, sizeof(T)) | std::views::reverse) {
-            auto& byte = m_buffer[i];
-            byte = cipher.byte(feedback ? byte : 0x00, is_encrypted) ^ byte;
-        }
-        return *this;
-    }
-#endif
-    auto& operator*() const {
-        return *reinterpret_cast<const T*>(m_buffer.data());
-    }
-
-private:
-    // T m_object;
-    //
-    // nfc_initiator_transceive_bits will directly ignore szRx, and in order
-    // to avoid out-of-bounds writes, memory can only be allocated according
-    // to the frame size.
-    std::array<std::uint8_t, PN53x_EXTENDED_FRAME__DATA_MAX_LEN> m_buffer{};
-
-    static_assert(sizeof(T) <= sizeof(m_buffer), "The object is too large.");
-};
-
-class NfcReceiveParity {
-public:
-    constexpr auto get(this auto& self) { return std::span(self.m_buffer); }
-
-private:
-    // see comments in NfcReceiveData
-    std::array<std::uint8_t, PN53x_EXTENDED_FRAME__DATA_MAX_LEN> m_buffer{};
-};
-
 class NfcDevice {
 public:
     class Initiator {
@@ -666,7 +615,139 @@ public:
             NFCPP_LIBNFC_ENSURE(nfc_initiator_deselect_target(m_device));
         }
 
-        void transceive_bytes(
+        template <bool BitMode>
+        class ResultWrapper {
+        public:
+            auto& as_big_endian() {
+                if constexpr (std::endian::native == std::endian::little)
+                    std::ranges::reverse(
+                        m_buffer_view | std::views::take(valid_size_in_byte())
+                    );
+                return *this;
+            }
+#if NFCPP_ENABLE_CRAPTO1
+            auto& as_decrypted(
+                mifare::MifareCrypto1Cipher& cipher,
+                bool                         feedback,
+                bool                         is_encrypted
+            ) {
+                auto valid_size = valid_size_in_byte();
+                if constexpr (BitMode) {
+                    auto diff = m_valid_size - aligndn_8(m_valid_size);
+                    if (diff > 0) valid_size -= 1;
+                    auto& byte = m_buffer_view[valid_size]; // Last byte.
+                    for (auto i : std::views::iota(0uz, diff)) {
+                        byte |= cipher.bit(BIT(byte, i), is_encrypted) << i;
+                    }
+                }
+                for (auto i :
+                     std::views::iota(0uz, valid_size) | std::views::reverse) {
+                    auto& byte = m_buffer_view[i];
+                    byte = cipher.byte(feedback ? byte : 0x00, is_encrypted)
+                         ^ byte;
+                }
+                return *this;
+            }
+#endif
+
+            template <detail::TriviallyCopyable T>
+            auto& get() {
+                return *reinterpret_cast<const T*>(m_buffer_view.data());
+            }
+
+            template <std::size_t Sz>
+            auto get_bytes() {
+                std::array<uint8_t, Sz> ret;
+                std::ranges::copy_n(m_buffer_view.begin(), Sz, ret.begin());
+                return ret;
+            }
+
+            template <std::size_t Sz>
+            auto get_bytes_ref() {
+                return m_buffer_view.subspan(0, Sz);
+            }
+
+            template <detail::TriviallyCopyable T>
+            auto& expect() {
+                constexpr std::size_t expect_size =
+                    BitMode ? sizeof(T) * 8 : sizeof(T);
+                _throw_if_size_mismatch<expect_size>();
+                return get<T>();
+            }
+
+            template <std::size_t Sz>
+            auto& expect_bytes() {
+                constexpr std::size_t expect_size = BitMode ? Sz * 8 : Sz;
+                _throw_if_size_mismatch<expect_size>();
+                return get_bytes<Sz>();
+            }
+
+            template <std::size_t Sz>
+            auto& expect_bytes_ref() {
+                constexpr std::size_t expect_size = BitMode ? Sz * 8 : Sz;
+                _throw_if_size_mismatch<expect_size>();
+                return get_bytes<Sz>();
+            }
+
+            template <std::size_t SzInBit>
+            auto& expect_bits()
+                requires BitMode
+            {
+                _throw_if_size_mismatch<SzInBit>();
+                return get_bytes<alignup_8(SzInBit) / 8>();
+            }
+
+            template <std::size_t SzInBit>
+            auto& expect_bits_ref()
+                requires BitMode
+            {
+                _throw_if_size_mismatch<SzInBit>();
+                return get_bytes<alignup_8(SzInBit) / 8>();
+            }
+
+            bool empty() const { return m_valid_size == 0; }
+
+        private:
+            friend class Initiator;
+            ResultWrapper(
+                std::span<uint8_t> buffer_view,
+                std::size_t        valid_size
+            )
+            : m_buffer_view(buffer_view),
+              m_valid_size(valid_size) {}
+
+            template <std::size_t SizeMayInBits>
+            void _throw_if_size_mismatch() {
+                if (m_valid_size != SizeMayInBits) {
+                    throw NfcException(
+                        NFC_EINVARG,
+                        std::format(
+                            "transceive_{0} received {1} but expect {2} {0}.",
+                            BitMode ? "bits" : "bytes",
+                            m_valid_size,
+                            SizeMayInBits
+                        )
+                    );
+                }
+            }
+
+            static constexpr std::size_t alignup_8(std::size_t x) {
+                return (x + 7) & ~7;
+            }
+
+            static constexpr std::size_t aligndn_8(std::size_t x) {
+                return x & ~7;
+            }
+
+            auto valid_size_in_byte() const {
+                return BitMode ? alignup_8(m_valid_size) / 8 : m_valid_size;
+            }
+
+            std::span<uint8_t> m_buffer_view;
+            std::size_t        m_valid_size; // Possibly in bits.
+        };
+
+        auto transceive_bytes(
             const detail::IsReadableByteSpan auto& tx_data,
             detail::IsMutableByteSpan auto&        rx_data,
             int                                    timeout = 0
@@ -684,26 +765,18 @@ public:
             );
             NFCPP_LIBNFC_ENSURE(ret);
 
-            // TODO: Better handle this situation.
-            if (static_cast<size_t>(ret) != rx.size()) {
-                std::println(
-                    "!!! warning: transceive_bytes received {} but expect "
-                    "{} "
-                    "bytes.",
-                    ret,
-                    rx.size()
-                );
-            }
+            return ResultWrapper<false>(rx, ret);
         }
 
         // Ensure NP_HANDLE_PARITY == true if AutoParity is not used,
         // otherwise, libnfc will access to null pointer!
-        void transceive_bits(
-            const detail::IsReadableByteSpan auto& tx_data,
-            detail::IsMutableByteSpan auto&        rx_data,
-            std::size_t                            tx_size_in_bit = 0,
-            detail::OptionalRef<NfcReceiveParity>  rx_data_par = std::nullopt,
-            int                                    timeout     = 0
+        template <detail::IsReadableByteSpan Tx, detail::IsMutableByteSpan Rx>
+        auto transceive_bits(
+            const Tx&               tx_data,
+            Rx&                     rx_data,
+            std::size_t             tx_size_in_bit = 0,
+            detail::OptionalRef<Rx> rx_data_par    = std::nullopt,
+            int                     timeout        = 0
         ) {
             using tx_data_t = std::remove_cvref_t<decltype(tx_data)>;
 
@@ -716,7 +789,7 @@ public:
             if constexpr (detail::HasParityGetter<tx_data_t>) {
                 auto parity = tx_data.get_parity();
                 auto rx_par =
-                    rx_data_par ? (*rx_data_par).get().get().data() : nullptr;
+                    rx_data_par ? rx_data_par->get().get().data() : nullptr;
 
                 ret = nfc_initiator_transceive_bits(
                     m_device,
@@ -724,7 +797,7 @@ public:
                     tx_size,
                     parity.data(),
                     rx.data(),
-                    0, // see comments in NfcReceiveData.
+                    rx.size(),
                     rx_par
                 );
             } else {
@@ -734,22 +807,13 @@ public:
                     tx_size,
                     nullptr,
                     rx.data(),
-                    0,
+                    rx.size(),
                     nullptr
                 );
             }
             NFCPP_LIBNFC_ENSURE(ret);
 
-            // TODO: Better handle this situation.
-            if (static_cast<size_t>(ret) != rx.size() * 8) {
-                std::println(
-                    "!!! warning: transceive_bits received {} but expect "
-                    "{} "
-                    "bits.",
-                    ret,
-                    rx.size() * 8
-                );
-            }
+            return ResultWrapper<true>(rx, ret);
         }
 
     private:
@@ -856,6 +920,19 @@ private:
     nfc_device* m_device{};
 
     explicit NfcPN53xDriver(NfcDevice& parent) : m_device(&*parent.m_device) {}
+};
+
+class NfcPN53xFrameBuffer {
+public:
+    auto get(this auto& self) { return std::span(self.m_buffer); }
+
+private:
+    // T m_object;
+    //
+    // nfc_initiator_transceive_bits will directly ignore szRx, and in order
+    // to avoid out-of-bounds writes, memory can only be allocated according
+    // to the frame size.
+    std::array<std::uint8_t, PN53x_EXTENDED_FRAME__DATA_MAX_LEN> m_buffer{};
 };
 
 class NfcContext {

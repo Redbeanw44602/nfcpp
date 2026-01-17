@@ -41,15 +41,19 @@ int main(int argc, char* argv[]) try {
     constexpr auto SECTOR_ADDR = 0x00;
     constexpr auto KEY_A       = 0xFFFFFFFFFFFF;
 
+    NfcPN53xFrameBuffer buffer;
+
     // [R -> T] Request plaintext nonce. (Nt)
 
-    NfcReceiveData<uint32_t> nt_r;
-    initiator->transceive_bits(data_crc_parity(MC_AUTH_A, SECTOR_ADDR), nt_r);
+    auto nt_r = initiator->transceive_bits(
+        data_crc_parity(MC_AUTH_A, SECTOR_ADDR),
+        buffer
+    );
 
     // [T -> R] Answer plaintext nonce.
     //          Each initializes its Crypto1 state.
 
-    auto nt = *nt_r.as_big_endian();
+    auto nt = nt_r.as_big_endian().get<uint32_t>();
 
     std::println("Nt:  {}", hex(std::byteswap(nt)));
 
@@ -68,8 +72,7 @@ int main(int argc, char* argv[]) try {
 
     std::println("Ar:  {}", hex(ar));
 
-    NfcReceiveData<uint32_t> at_r;
-    initiator->transceive_bits(
+    auto at_r = initiator->transceive_bits(
         data_parity(ar).with_encrypt(
             cipher,
             [](auto&& cipher) {
@@ -77,13 +80,14 @@ int main(int argc, char* argv[]) try {
                 cipher.crypt(4);
             }
         ),
-        at_r
+        buffer
     );
 
     // [T -> R] Tag answer and reader verification.
     //          Authentication completed.
 
-    auto at = *at_r.as_big_endian().as_decrypted(cipher, false, false);
+    auto at =
+        at_r.as_big_endian().as_decrypted(cipher, false, false).get<uint32_t>();
 
     std::println("At:  {}", hex(std::byteswap(at)));
 
