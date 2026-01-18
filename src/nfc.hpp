@@ -537,7 +537,7 @@ public:
         };
     }
 
-    auto atqa_ref() const {
+    auto atqa_view() const {
         return std::span<const std::uint8_t, 2>(m_info->abtAtqa);
     }
 
@@ -550,12 +550,12 @@ public:
         );
     }
 
-    auto uid_ref() const {
+    auto uid_view() const {
         return std::span<const std::uint8_t>{m_info->abtUid, m_info->szUidLen};
     }
 
     auto nuid() const {
-        auto          id = uid_ref();
+        auto          id = uid_view();
         std::uint32_t ret;
 
         std::memcpy(&ret, id.data() + id.size() - 4, sizeof(ret));
@@ -815,7 +815,7 @@ public:
             }
 
             template <std::size_t Sz>
-            auto get_bytes_ref() const {
+            auto get_bytes_view() const {
                 return m_buffer_view.first(Sz);
             }
 
@@ -835,7 +835,7 @@ public:
             }
 
             template <std::size_t Sz>
-            auto expect_bytes_ref() const {
+            auto expect_bytes_view() const {
                 constexpr std::size_t expect_size = BitMode ? Sz * 8 : Sz;
                 _throw_if_size_mismatch<expect_size>();
                 return get_bytes<Sz>();
@@ -850,7 +850,7 @@ public:
             }
 
             template <std::size_t SzInBit>
-            auto expect_bits_ref() const
+            auto expect_bits_view() const
                 requires BitMode
             {
                 _throw_if_size_mismatch<SzInBit>();
