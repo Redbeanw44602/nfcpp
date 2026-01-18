@@ -619,12 +619,15 @@ public:
           )
       ) {}
 
-    template <detail::IsByte... Bytes>
-        requires(sizeof...(Bytes) == Base)
+    template <detail::IsByteOrByteRange... Bytes>
+    // Although util::concat_bytes supports dynamic arrays, we still require the
+    // transmit data size to be determined at compile time.
+        requires(
+            (detail::is_static_extent_bytes<Bytes>() && ...)
+            && (detail::get_static_extent_bytes_size<Bytes>() + ...) == Base
+        )
     constexpr explicit NfcTransmitData(Bytes... bytes)
-    : NfcTransmitData(
-          std::array<std::uint8_t, Base>{static_cast<std::uint8_t>(bytes)...}
-      ) {}
+    : NfcTransmitData(util::concat_bytes(bytes...)) {}
 
     constexpr auto get(this auto& self) { return std::span(self.m_buffer); }
 
@@ -685,8 +688,12 @@ private:
         m_parity_buffer;
 };
 
-template <typename... Bytes, detail::IsNfcTransmitDataTransformer... Ts>
-NfcTransmitData(Bytes...) -> NfcTransmitData<sizeof...(Bytes), Ts...>;
+template <
+    detail::IsByteOrByteRange... Bytes,
+    detail::IsNfcTransmitDataTransformer... Ts>
+NfcTransmitData(Bytes...) -> NfcTransmitData<
+    (detail::get_static_extent_bytes_size<Bytes>() + ...),
+    Ts...>;
 
 template <std::size_t N, detail::IsNfcTransmitDataTransformer... Ts>
 NfcTransmitData(const std::array<std::uint8_t, N>&)

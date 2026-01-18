@@ -60,20 +60,21 @@ int main(int argc, char* argv[]) try {
     MifareCrypto1Cipher cipher(KEY_A);
     cipher.word(nuid ^ nt, false);
 
-    // [R -> T] Construct and send reader answer. (Ar)
+    // [R -> T] Send reader answer. (Ar)
 
-    std::array<uint8_t, 8> ar{}; // 4 bytes (Nr) + 4 bytes (Ntt)
+    std::array<uint8_t, 4> nr{};
+    std::array<uint8_t, 4> ntt{};
 
     nt = prng_successor(nt, 32);
-    for (auto i : std::views::iota(4, 8)) {
-        nt    = prng_successor(nt, 8);
-        ar[i] = nt & 0xff;
+    for (auto i : std::views::iota(0, 4)) {
+        nt     = prng_successor(nt, 8);
+        ntt[i] = nt & 0xff;
     }
 
-    std::println("Ar:  {}", hex(ar));
+    std::println("Ar:  {} {}", hex(nr), hex(ntt));
 
     auto at_r = initiator->transceive_bits(
-        data_parity(ar).with_encrypt(
+        data_parity(nr, ntt).with_encrypt(
             cipher,
             [](auto&& cipher) {
                 cipher.crypt_feed(4);
