@@ -776,7 +776,7 @@ public:
             template <detail::IsByte... Bytes>
             bool is_bytes(Bytes... bytes) const {
                 return util::is_bytes(
-                    m_buffer_view.first(valid_size_in_byte()),
+                    m_buffer_view.first(size_in_byte()),
                     bytes...
                 );
             }
@@ -785,12 +785,44 @@ public:
                 return util::bcc(m_buffer_view.first(size_in_byte())) == 0;
             }
 
+            template <NfcCRC CRCType>
+            bool check_crc() const {
+                std::array<std::uint8_t, 2> crc;
+
+                if (size_in_byte() < 3) {
+                    throw NfcException(
+                        NFC_EINVARG,
+                        "check_crc was called, but the data was less than 3 "
+                        "bytes."
+                    );
+                }
+
+                if constexpr (CRCType == NfcCRC::ISO14443A) {
+                    iso14443a_crc(
+                        m_buffer_view.data(),
+                        size_in_byte() - 2,
+                        crc.data()
+                    );
+                }
+
+                if constexpr (CRCType == NfcCRC::ISO14443B) {
+                    iso14443b_crc(
+                        m_buffer_view.data(),
+                        size_in_byte() - 2,
+                        crc.data()
+                    );
+                }
+
+                return std::ranges::equal(
+                    m_buffer_view.first(size_in_byte()).last(2),
+                    crc
+                );
             }
 
             auto& as_big_endian() {
                 if constexpr (std::endian::native == std::endian::little)
                     std::ranges::reverse(
-                        m_buffer_view | std::views::take(valid_size_in_byte())
+                        m_buffer_view | std::views::take(size_in_byte())
                     );
                 return *this;
             }
@@ -800,7 +832,7 @@ public:
                 bool                         feedback,
                 bool                         is_encrypted
             ) {
-                auto valid_size = valid_size_in_byte();
+                auto valid_size = size_in_byte();
                 if constexpr (BitMode) {
                     auto diff = m_valid_size - aligndn_8(m_valid_size);
                     if (diff > 0) valid_size -= 1;
@@ -824,6 +856,11 @@ public:
                 return *reinterpret_cast<const T*>(m_buffer_view.data());
             }
 
+            template <std::size_t Idx>
+            auto get_byte() const {
+                return m_buffer_view[Idx];
+            }
+
             template <std::size_t Sz>
             auto get_bytes() const {
                 std::array<std::uint8_t, Sz> ret;
@@ -842,6 +879,14 @@ public:
                     BitMode ? sizeof(T) * 8 : sizeof(T);
                 _throw_if_size_mismatch<expect_size>();
                 return get<T>();
+            }
+
+            template <std::size_t Idx>
+            auto expect_byte() const {
+                constexpr std::size_t expect_size =
+                    BitMode ? (Idx + 1) * 8 : (Idx + 1);
+                _throw_if_size_mismatch<expect_size>();
+                return get_bytes<Idx>();
             }
 
             template <std::size_t Sz>
@@ -874,7 +919,13 @@ public:
                 return get_bytes_view<alignup_8(SzInBit) / 8>();
             }
 
-            bool empty() const { return m_valid_size == 0; }
+            auto empty() const { return m_valid_size == 0; }
+
+            auto size() const { return m_valid_size; }
+
+            auto size_in_byte() const {
+                return BitMode ? alignup_8(m_valid_size) / 8 : m_valid_size;
+            }
 
         private:
             friend class Initiator;
@@ -906,10 +957,6 @@ public:
 
             static constexpr std::size_t aligndn_8(std::size_t x) {
                 return x & ~7;
-            }
-
-            auto valid_size_in_byte() const {
-                return BitMode ? alignup_8(m_valid_size) / 8 : m_valid_size;
             }
 
             std::span<std::uint8_t> m_buffer_view;
