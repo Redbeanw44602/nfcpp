@@ -112,6 +112,43 @@ template <typename T>
 concept IsByteOrByteRange = IsByte<T> || IsByteRange<T>;
 
 template <typename T>
+struct IsStdSpanImpl : std::false_type {};
+
+template <typename T, std::size_t E>
+struct IsStdSpanImpl<std::span<T, E>> : std::true_type {};
+
+template <typename T>
+concept IsStdSpan = IsStdSpanImpl<std::remove_cvref_t<T>>::value;
+
+template <typename T>
+struct IsStdArrayImpl : std::false_type {};
+
+template <typename T, std::size_t N>
+struct IsStdArrayImpl<std::array<T, N>> : std::true_type {};
+
+template <typename T>
+concept IsStdArray = IsStdArrayImpl<std::remove_cvref_t<T>>::value;
+
+template <typename T>
+concept IsStaticExtentStdSpan =
+    IsStdSpan<T> && T::extent != std::dynamic_extent;
+
+template <typename T>
+concept IsCStyleArrayBytes =
+    std::is_bounded_array_v<T> && std::rank_v<T> == 1
+    && std::convertible_to<std::remove_extent_t<T>, std::uint8_t>;
+
+template <typename T>
+concept IsStdArrayBytes =
+    detail::IsStdArray<T>
+    && std::convertible_to<typename T::value_type, std::uint8_t>;
+
+template <typename T>
+concept IsStaticExtentStdSpanBytes =
+    detail::IsStaticExtentStdSpan<T>
+    && std::convertible_to<typename T::element_type, std::uint8_t>;
+
+template <typename T>
 using Ptr = T*;
 
 template <typename T>
@@ -211,6 +248,39 @@ template <HasParityCalculator First, typename... Rest>
 struct SelectParityCalculatorTransformer<First, Rest...> {
     using type = First;
 };
+
+template <typename T>
+constexpr auto is_static_extent_bytes() {
+    using U = std::remove_cvref_t<T>;
+    return IsByte<U> || IsStaticExtentStdSpanBytes<U> || IsStdArrayBytes<U>
+        || IsCStyleArrayBytes<U>;
+}
+
+template <typename T>
+constexpr auto get_static_extent_bytes_size() {
+    using U = std::remove_cvref_t<T>;
+    if constexpr (IsByte<U>) {
+        return 1;
+    } else if constexpr (IsStaticExtentStdSpanBytes<U>) {
+        return U::extent;
+    } else if constexpr (IsStdArrayBytes<U>) {
+        return std::tuple_size_v<U>;
+    } else if constexpr (IsCStyleArrayBytes<U>) {
+        return std::extent_v<U>;
+    } else {
+        static_assert(false, "Unsupported type!");
+    }
+}
+
+template <typename T>
+constexpr auto get_dynamic_extent_bytes_size(T&& t) {
+    using U = std::remove_cvref_t<decltype(t)>;
+    if constexpr (std::convertible_to<U, std::uint8_t>) {
+        return 1;
+    } else {
+        return std::ranges::size(t);
+    }
+}
 
 } // namespace detail
 
@@ -345,6 +415,46 @@ bool is_bytes(std::span<const std::uint8_t> span, Bytes... bytes) {
     };
 
     return std::ranges::equal(span, pattern);
+}
+
+template <detail::IsByteOrByteRange... Bytes>
+constexpr auto concat_bytes(Bytes... bytes) {
+    if constexpr ((detail::is_static_extent_bytes<Bytes>() && ...)) {
+        constexpr auto size =
+            (detail::get_static_extent_bytes_size<Bytes>() + ...);
+        std::array<uint8_t, size> ret;
+
+        auto it = ret.begin();
+
+        auto append = [&](auto&& byte) {
+            using T = std::remove_cvref_t<decltype(byte)>;
+            if constexpr (std::convertible_to<T, std::uint8_t>) {
+                *it++ = static_cast<std::uint8_t>(byte);
+            } else {
+                it = std::ranges::copy(byte, it).out;
+            }
+        };
+
+        (append(std::forward<Bytes>(bytes)), ...);
+        return ret;
+    } else {
+        std::vector<uint8_t> ret;
+
+        auto size = (detail::get_dynamic_extent_bytes_size(bytes) + ...);
+        ret.reserve(size);
+
+        auto append = [&](auto&& byte) {
+            using T = std::remove_cvref_t<decltype(byte)>;
+            if constexpr (std::convertible_to<T, std::uint8_t>) {
+                ret.emplace_back(static_cast<std::uint8_t>(byte));
+            } else {
+                ret.insert_range(ret.end(), byte);
+            }
+        };
+
+        (append(std::forward<Bytes>(bytes)), ...);
+        return ret;
+    }
 }
 
 } // namespace util
