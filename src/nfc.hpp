@@ -417,6 +417,11 @@ constexpr bool is_bytes(std::span<const std::uint8_t> span, Bytes... bytes) {
     return std::ranges::equal(span, pattern);
 }
 
+template <std::ranges::contiguous_range T>
+constexpr auto bcc(const T& range) {
+    return std::ranges::fold_left(range, std::uint8_t{0}, std::bit_xor<>());
+}
+
 template <detail::IsByteOrByteRange... Bytes>
 constexpr auto concat_bytes(Bytes... bytes) {
     if constexpr ((detail::is_static_extent_bytes<Bytes>() && ...)) {
@@ -507,6 +512,15 @@ struct NfcTransmitDataCRCTransformer {
         if constexpr (CrcType == NfcCRC::ISO14443B) {
             iso14443b_crc(data_start, data_size, crc_start);
         }
+    }
+};
+
+struct NfcTransmitDataBCCTransformer {
+    static constexpr std::size_t expand(std::size_t in) { return in + 1; }
+
+    static constexpr void apply(std::span<std::uint8_t> input) {
+        const auto size = input.size();
+        input[size - 1] = util::bcc(input.first(size - 1));
     }
 };
 
@@ -768,12 +782,9 @@ public:
             }
 
             bool check_bcc() const {
-                return std::ranges::fold_left(
-                           m_buffer_view.first(valid_size_in_byte()),
-                           std::uint8_t{0},
-                           std::bit_xor<>()
-                       )
-                    == 0;
+                return util::bcc(m_buffer_view.first(size_in_byte())) == 0;
+            }
+
             }
 
             auto& as_big_endian() {
