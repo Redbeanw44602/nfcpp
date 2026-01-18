@@ -823,7 +823,7 @@ public:
 
             template <std::size_t Sz>
             auto get_bytes_view() const {
-                return m_buffer_view.first(Sz);
+                return m_buffer_view.template first<Sz>();
             }
 
             template <detail::TriviallyCopyable T>
@@ -845,7 +845,7 @@ public:
             auto expect_bytes_view() const {
                 constexpr std::size_t expect_size = BitMode ? Sz * 8 : Sz;
                 _throw_if_size_mismatch<expect_size>();
-                return get_bytes<Sz>();
+                return get_bytes_view<Sz>();
             }
 
             template <std::size_t SzInBit>
@@ -861,7 +861,7 @@ public:
                 requires BitMode
             {
                 _throw_if_size_mismatch<SzInBit>();
-                return get_bytes<alignup_8(SzInBit) / 8>();
+                return get_bytes_view<alignup_8(SzInBit) / 8>();
             }
 
             bool empty() const { return m_valid_size == 0; }
@@ -1120,7 +1120,7 @@ public:
     };
 
     auto list_devices() const {
-        constexpr size_t MAX_DEVICE_COUNT = 16;
+        constexpr std::size_t MAX_DEVICE_COUNT = 16;
 
         std::vector<std::string> ret;
 
