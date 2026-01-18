@@ -405,7 +405,7 @@ constexpr std::string hex(const T& object) {
 }
 
 template <detail::IsByte... Bytes>
-bool is_bytes(std::span<const std::uint8_t> span, Bytes... bytes) {
+constexpr bool is_bytes(std::span<const std::uint8_t> span, Bytes... bytes) {
     const auto     data_size    = span.size();
     constexpr auto pattern_size = sizeof...(Bytes);
 
@@ -496,8 +496,7 @@ template <NfcCRC CrcType>
 struct NfcTransmitDataCRCTransformer {
     static constexpr std::size_t expand(std::size_t in) { return in + 2; }
 
-    template <std::size_t In>
-    static constexpr void apply(std::span<std::uint8_t, In> input) {
+    static constexpr void apply(std::span<std::uint8_t> input) {
         const auto data_start = const_cast<std::uint8_t*>(input.data());
         const auto data_size  = input.size() - 2;
         const auto crc_start  = input.data() + data_size;
@@ -558,7 +557,7 @@ public:
         auto          id = uid_view();
         std::uint32_t ret;
 
-        std::memcpy(&ret, id.data() + id.size() - 4, sizeof(ret));
+        std::memcpy(&ret, id.data(), sizeof(ret));
 
         return util::to_big_endian(ret);
     }
