@@ -1024,8 +1024,7 @@ public:
             const Tx&               tx_data,
             Rx&                     rx_data,
             std::size_t             tx_size_in_bit = 0,
-            detail::OptionalRef<Rx> rx_data_par    = std::nullopt,
-            int                     timeout        = 0
+            detail::OptionalRef<Rx> rx_data_par    = std::nullopt
         ) {
             using tx_data_t = std::remove_cvref_t<decltype(tx_data)>;
 
