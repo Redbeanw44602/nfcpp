@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) try {
     auto target_info = target.get_info<NfcISO14443ATargetInfo>();
     auto nuid        = target_info->nuid();
 
-    std::println("Uid: {}", hex(nuid));
+    std::println("Uid: {}", hex(std::byteswap(nuid)));
 
     device->set_property(NP_EASY_FRAMING, false);
     device->set_property(NP_HANDLE_CRC, false);

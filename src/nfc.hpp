@@ -289,8 +289,9 @@ namespace mifare {
 #if NFCPP_ENABLE_CRAPTO1
 class MifareCrypto1Cipher {
 public:
-    explicit MifareCrypto1Cipher(std::uint64_t key = 0)
-    : m_state(crypto1_create(key), crypto1_destroy) {};
+    explicit MifareCrypto1Cipher(std::uint64_t key = 0) {
+        crypto1_init(&m_state, key);
+    };
 
     // bare c methods
     // - prng_successor
@@ -301,55 +302,87 @@ public:
     // - lfsr_common_prefix
     // - lfsr_prefix_ks
 
-    void init(std::uint64_t key) { crypto1_init(&*m_state, key); }
+    void init(std::uint64_t key) { crypto1_init(&m_state, key); }
 
     auto get_lfsr() const {
         std::uint64_t ret{};
-        crypto1_get_lfsr(&*m_state, &ret);
+        crypto1_get_lfsr(
+            &const_cast<MifareCrypto1Cipher&>(*this).m_state,
+            &ret
+        );
         return ret;
     }
 
     auto bit(std::uint8_t input, bool is_encrypted) {
-        return crypto1_bit(&*m_state, input, is_encrypted);
+        return crypto1_bit(&m_state, input, is_encrypted);
     }
     auto byte(std::uint8_t input, bool is_encrypted) {
-        return crypto1_byte(&*m_state, input, is_encrypted);
+        return crypto1_byte(&m_state, input, is_encrypted);
     }
     auto word(std::uint32_t input, bool is_encrypted) {
-        return crypto1_word(&*m_state, input, is_encrypted);
+        return crypto1_word(&m_state, input, is_encrypted);
     }
 
     auto rollback_bit(std::uint32_t input, bool feedback) {
-        return lfsr_rollback_bit(&*m_state, input, feedback);
+        return lfsr_rollback_bit(&m_state, input, feedback);
     }
     auto rollback_byte(std::uint32_t input, bool feedback) {
-        return lfsr_rollback_byte(&*m_state, input, feedback);
+        return lfsr_rollback_byte(&m_state, input, feedback);
     }
     auto rollback_word(std::uint32_t input, bool feedback) {
-        return lfsr_rollback_word(&*m_state, input, feedback);
+        return lfsr_rollback_word(&m_state, input, feedback);
     }
 
-    auto filter() { return ::filter(m_state->odd); }
+    auto filter() { return ::filter(m_state.odd); }
 
-    auto get(this auto& self) { return &*self.m_state; };
+    auto get(this auto& self) { return &self.m_state; };
+
+    auto odd() const { return m_state.odd; }
+
+    auto even() const { return m_state.even; }
+
+    bool operator==(const MifareCrypto1Cipher& other) const {
+        return m_state.odd == other.m_state.odd
+            && m_state.even == other.m_state.even;
+    }
+
+    class StateList {
+    public:
+        auto operator*(this auto& self) { return self.m_view; }
+
+    private:
+        friend class MifareCrypto1Cipher;
+        explicit StateList(Crypto1State* head) : m_ownership(head) {
+            std::size_t size{};
+            for (auto ptr = head; ptr->even | ptr->odd; ptr++) size++;
+            m_view =
+                std::span(reinterpret_cast<MifareCrypto1Cipher*>(head), size);
+        }
+
+        std::unique_ptr<Crypto1State>  m_ownership;
+        std::span<MifareCrypto1Cipher> m_view;
+    };
 
     static auto recovery32(std::uint32_t keystream, std::uint32_t input) {
-        return create_holder(lfsr_recovery32(keystream, input));
+        auto ptr = lfsr_recovery32(keystream, input);
+        return StateList(ptr);
     }
+
     static auto
     recovery64(std::uint32_t keystream_h32, std::uint32_t keystream_l32) {
-        return create_holder(lfsr_recovery64(keystream_h32, keystream_l32));
+        auto ptr = lfsr_recovery64(keystream_h32, keystream_l32);
+        return StateList(ptr);
     }
 
 private:
-    using state_holder_t =
-        std::unique_ptr<Crypto1State, detail::Ptr<void(Crypto1State*)>>;
-    state_holder_t m_state;
-
-    static state_holder_t create_holder(Crypto1State* ptr) {
-        return decltype(m_state)(ptr, crypto1_destroy);
-    }
+    Crypto1State m_state;
 };
+
+static_assert(
+    std::is_standard_layout_v<MifareCrypto1Cipher>
+    && sizeof(MifareCrypto1Cipher) == sizeof(Crypto1State)
+);
+
 #endif
 
 } // namespace mifare
