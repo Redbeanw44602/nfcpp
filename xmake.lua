@@ -9,6 +9,11 @@ option('crapto1')
     set_showmenu(true)
     set_description('Enable crapto1 support, you must comply with the GPLv3 license.')
 
+option('examples')
+    set_default(false)
+    set_showmenu(true)
+    set_description('Build examples.')
+
 target('nfc-extra')
     set_kind('headeronly')
     add_headerfiles('src/nfc-extra/*.h')
@@ -34,4 +39,6 @@ target('nfcpp')
         end
     end)
 
+if has_config('examples') then
 includes('examples')
+end
