@@ -31,7 +31,7 @@
         char buffer[1024];                                                     \
         nfc_strerror_r(&*m_device, buffer, sizeof(buffer));                    \
         throw NfcException(                                                    \
-            result,                                                            \
+            static_cast<NfcError>(result),                                     \
             std::format("{}: {}", util::current_location(), buffer)            \
         );                                                                     \
     }
@@ -45,6 +45,37 @@ enum class NfcCard {
 enum class NfcCRC {
     ISO14443A,
     ISO14443B,
+};
+
+enum class NfcError {
+    // Success(no error)
+    SUCCESS = 0,
+    // Input / output error, device may not be usable anymore without re-open it
+    IO = -1,
+    // Invalid argument(s)
+    INVARG = -2,
+    //  Operation not supported by device
+    DEVNOTSUPP = -3,
+    // No such device
+    NOTSUCHDEV = -4,
+    // Buffer overflow
+    OVFLOW = -5,
+    // Operation timed out
+    TIMEOUT = -6,
+    // Operation aborted (by user)
+    OPABORTED = -7,
+    // Not (yet) implemented
+    NOTIMPL = -8,
+    // Target released
+    TGRELEASED = -10,
+    // Error while RF transmission
+    RFTRANS = -20,
+    // MIFARE Classic: authentication failed
+    MFCAUTHFAIL = -30,
+    // Software error (allocation, file/pipe creation, etc.)
+    SOFT = -80,
+    // Device's internal chip error
+    CHIP = -90
 };
 
 class NfcContext;
@@ -504,14 +535,14 @@ public:
 
 class NfcException : public std::runtime_error {
 public:
-    NfcException(int error_code, std::string error_msg)
+    NfcException(NfcError error_code, std::string error_msg)
     : std::runtime_error(error_msg),
       m_error_code(error_code) {}
 
     auto error_code() const { return m_error_code; }
 
 private:
-    int m_error_code{};
+    NfcError m_error_code{};
 };
 
 class NfcParityCalculator {
@@ -824,7 +855,7 @@ public:
 
                 if (size_in_byte() < 3) {
                     throw NfcException(
-                        NFC_EINVARG,
+                        NfcError::INVARG,
                         "check_crc was called, but the data was less than 3 "
                         "bytes."
                     );
@@ -973,7 +1004,7 @@ public:
             void _throw_if_size_mismatch() const {
                 if (m_valid_size != SizeMayInBits) {
                     throw NfcException(
-                        NFC_EINVARG,
+                        NfcError::INVARG,
                         std::format(
                             "transceive_{0} received {1} but expect {2} {0}.",
                             BitMode ? "bits" : "bytes",
@@ -1077,7 +1108,7 @@ public:
             case NfcCard::MifareClassic1K:
                 return {.nmt = NMT_ISO14443A, .nbr = NBR_106};
             default:
-                throw NfcException(NFC_EINVARG, "Unreachable.");
+                throw NfcException(NfcError::INVARG, "Unreachable.");
             }
         }
     };
@@ -1190,7 +1221,7 @@ public:
         nfc_init(&ptr);
         if (!ptr) {
             throw NfcException(
-                NFC_EINVARG,
+                NfcError::INVARG,
                 "Failed to initialize nfc context!"
             );
         }
@@ -1203,7 +1234,7 @@ public:
             connstring.empty() ? nullptr : connstring.c_str()
         );
         if (!device) {
-            throw NfcException(NFC_ENOTSUCHDEV, "No device found.");
+            throw NfcException(NfcError::NOTSUCHDEV, "No device found.");
         }
         return std::unique_ptr<NfcDevice>(new NfcDevice(device));
     };
