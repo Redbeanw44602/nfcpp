@@ -39,7 +39,7 @@
 namespace nfcpp {
 
 enum class NfcCard {
-    MifareClassic1K,
+    Mifare,
 };
 
 enum class NfcCRC {
@@ -812,22 +812,31 @@ public:
         // - nfc_initiator_target_is_present
 
         auto select_passive_target(
-            NfcCard                                      card,
-            std::optional<std::span<const std::uint8_t>> uid = std::nullopt
+            nfc_modulation_type           modulation_type,
+            nfc_baud_rate                 baud_rate,
+            std::span<const std::uint8_t> uid = {}
         ) {
             NfcTarget target;
-            auto      modulation = get_modulation_from_card(card);
+            auto      modulation = nfc_modulation{modulation_type, baud_rate};
 
             auto ret = nfc_initiator_select_passive_target(
                 m_device,
                 modulation,
-                uid ? uid->data() : nullptr,
-                uid ? uid->size() : 0,
+                uid.empty() ? nullptr : uid.data(),
+                uid.empty() ? 0 : uid.size(),
                 &target.get()
             );
             NFCPP_LIBNFC_ENSURE(ret);
 
             return target;
+        }
+
+        auto select_passive_target(
+            NfcCard                       card,
+            std::span<const std::uint8_t> uid = {}
+        ) {
+            auto [type, baud_rate] = get_modulation_from_card(card);
+            return select_passive_target(type, baud_rate, uid);
         }
 
         void deselect_target() {
@@ -1105,7 +1114,7 @@ public:
 
         static nfc_modulation get_modulation_from_card(NfcCard card) {
             switch (card) {
-            case NfcCard::MifareClassic1K:
+            case NfcCard::Mifare:
                 return {.nmt = NMT_ISO14443A, .nbr = NBR_106};
             default:
                 throw NfcException(NfcError::INVARG, "Unreachable.");
