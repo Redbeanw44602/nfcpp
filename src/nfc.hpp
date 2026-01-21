@@ -1227,10 +1227,9 @@ public:
             &*m_context,
             connstring.empty() ? nullptr : connstring.c_str()
         );
-        if (!device) {
-            throw NfcException(NfcError::NOTSUCHDEV, "No device found.");
-        }
-        return std::unique_ptr<NfcDevice>(new NfcDevice(device));
+        return std::unique_ptr<NfcDevice>(
+            device ? new NfcDevice(device) : nullptr
+        );
     };
 
     auto list_devices() const {
