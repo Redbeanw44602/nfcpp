@@ -17,13 +17,14 @@
 #include <print>
 #include <source_location>
 
-#include <nfc-extra/mifare.h>
-#include <nfc-extra/pn53x-internal.h>
-#include <nfc-extra/pn53x.h>
 #include <nfc/nfc.h>
 
+#include "nfc-extra/mifare.h"         // IWYU pragma: export
+#include "nfc-extra/pn53x-internal.h" // IWYU pragma: export
+#include "nfc-extra/pn53x.h"          // IWYU pragma: export
+
 #if NFCPP_ENABLE_CRAPTO1
-#include <crapto1/crapto1.h>
+#include "crapto1/crapto1.h" // IWYU pragma: export
 #endif
 
 #define NFCPP_LIBNFC_ENSURE(result)                                            \
@@ -640,7 +641,7 @@ public:
         return util::to_big_endian(ret);
     }
 
-    auto ats() const {
+    auto ats_view() const {
         return std::span<const std::uint8_t>{m_info->abtAts, m_info->szAtsLen};
     }
 

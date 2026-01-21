@@ -16,19 +16,19 @@ option('examples')
 
 target('nfc-extra')
     set_kind('headeronly')
-    add_headerfiles('src/nfc-extra/*.h')
+    add_headerfiles('src/nfc-extra/*.h', {prefixdir = 'nfcpp', rootdir= 'src'})
 
 if has_config('crapto1') then
 target('crapto1')
     set_kind('static')
     set_languages('c99')
     add_files('src/crapto1/*.c')
-    add_headerfiles('src/crapto1/*.h')
+    add_headerfiles('src/crapto1/*.h', {prefixdir = 'nfcpp', rootdir= 'src'})
 end
 
 target('nfcpp')
     set_kind('headeronly')
-    add_headerfiles('src/*.hpp')
+    add_headerfiles('src/*.hpp', {prefixdir = 'nfcpp', rootdir = 'src'})
     add_packages('libnfc', {public = true})
     add_deps('nfc-extra')
     add_options('crapto1')
