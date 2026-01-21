@@ -15,7 +15,6 @@
 
 #include <format>
 #include <print>
-#include <source_location>
 
 #include <nfc/nfc.h>
 
@@ -31,10 +30,7 @@
     if (result < 0) {                                                          \
         char buffer[1024];                                                     \
         nfc_strerror_r(&*m_device, buffer, sizeof(buffer));                    \
-        throw NfcException(                                                    \
-            static_cast<NfcError>(result),                                     \
-            std::format("{}: {}", util::current_location(), buffer)            \
-        );                                                                     \
+        throw NfcException(static_cast<NfcError>(result), buffer);             \
     }
 
 namespace nfcpp {
@@ -420,18 +416,6 @@ static_assert(
 } // namespace mifare
 
 namespace util {
-
-constexpr std::string current_location(
-    std::source_location&& location = std::source_location::current()
-) {
-    return std::format(
-        "{}({}:{}) `{}`",
-        location.file_name(),
-        location.line(),
-        location.column(),
-        location.function_name()
-    );
-}
 
 template <std::integral T>
 constexpr T to_big_endian(T value) {

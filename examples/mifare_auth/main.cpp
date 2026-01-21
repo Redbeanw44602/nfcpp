@@ -18,7 +18,7 @@ using data_parity = NfcTransmitDataAutoParity<N>;
 template <std::size_t N>
 using data_crc_parity = NfcTransmitDataAutoCRCParity<N, NfcCRC::ISO14443A>;
 
-int main(int argc, char* argv[]) try {
+int main(int, char*[]) try {
     NfcContext context;
 
     auto device = context.open_device();
@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) try {
     auto initiator = device->as_initiator();
     auto driver    = device->get_driver<NfcPN53xDriver>();
 
-    auto target = initiator->select_passive_target(NfcCard::MifareClassic1K);
+    auto target = initiator->select_passive_target(NfcCard::Mifare);
 
     auto target_info = target.get_info<NfcISO14443ATargetInfo>();
     auto nuid        = target_info->nuid();
