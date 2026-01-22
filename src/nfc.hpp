@@ -899,8 +899,7 @@ public:
                         byte |= cipher.bit(BIT(byte, i), is_encrypted) << i;
                     }
                 }
-                for (auto i :
-                     std::views::iota(0uz, valid_size) | std::views::reverse) {
+                for (auto i : std::views::iota(0uz, valid_size)) {
                     auto& byte = m_buffer_view[i];
                     byte = cipher.byte(feedback ? byte : 0x00, is_encrypted)
                          ^ byte;

@@ -87,8 +87,8 @@ int main(int, char*[]) try {
     // [T -> R] Tag answer and reader verification.
     //          Authentication completed.
 
-    auto at = at_r.as_big_endian()
-                  .as_decrypted(cipher, false, false)
+    auto at = at_r.as_decrypted(cipher, false, false)
+                  .as_big_endian()
                   .expect<uint32_t>();
 
     std::println("At:  {}", hex(std::byteswap(at)));
