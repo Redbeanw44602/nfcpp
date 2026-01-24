@@ -1250,6 +1250,8 @@ public:
         return ret;
     }
 
+    auto get(this auto& self) { return &*self.m_context; }
+
 private:
     std::unique_ptr<nfc_context, detail::Ptr<void(nfc_context*)>> m_context;
 };
