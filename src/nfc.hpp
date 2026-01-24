@@ -7,10 +7,12 @@
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <concepts>
 #include <cstring>
 #include <memory>
 #include <ranges>
+#include <type_traits>
 #include <vector>
 
 #include <format>
